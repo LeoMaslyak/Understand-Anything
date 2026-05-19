@@ -275,14 +275,13 @@ Last quality pass should include:
 - Djinn fresh multi-file verifier proof;
 - `printenv DJINN_UA_SEMANTIC_GRAPH_COMMAND` remains unset.
 
-Remaining final quality pass:
-- rerun `pnpm --filter @understand-anything/skill test -- --run src/__tests__/headless-understand.test.ts`;
-- rerun `pnpm --filter @understand-anything/skill build`;
-- rerun Djinn unset-command gate;
-- rerun one fresh tiny Djinn verifier proof;
-- rerun one fresh small multi-file Djinn verifier proof;
-- confirm `printenv DJINN_UA_SEMANTIC_GRAPH_COMMAND || echo not-configured`;
-- commit UA branch after the repeated gates pass.
+Final repeated quality pass:
+- `pnpm --filter @understand-anything/skill test -- --run src/__tests__/headless-understand.test.ts`: passed, 47 files / 786 tests.
+- `pnpm --filter @understand-anything/skill build`: passed.
+- Djinn unset-command gate on `/tmp/djinn-ua-final-unset-20260519-Yecr4M`: exited 1 with `not-configured`.
+- Djinn fresh tiny verifier proof on `/tmp/djinn-ua-final-fresh-tiny-20260519-RlqsVH`: `semantic-ready`, 4 nodes / 4 edges, provenance `understand-anything-semantic`, advisory `headlessStatus.finalizationMode: codex`.
+- Djinn fresh small multi-file verifier proof on `/tmp/djinn-ua-final-fresh-small-20260519-wpSnkr`: `semantic-ready`, 6 nodes / 7 edges, provenance `understand-anything-semantic`, advisory `headlessStatus.finalizationMode: codex`, focus coverage for `src/index.ts`, `src/math.ts`, and `src/__tests__/math.test.ts`.
+- `printenv DJINN_UA_SEMANTIC_GRAPH_COMMAND || echo not-configured`: `not-configured`.
 
 ## Quality Gates
 
@@ -293,10 +292,10 @@ Mid-project gate:
 - Fresh tiny proof succeeds directly through UA. Status: passed.
 
 Completion gate:
-- Fresh tiny and small multi-file targets both pass through Djinn `verify:graph-semantic-command`. Status: passed once.
-- Both show `provenanceSource: understand-anything-semantic`. Status: passed once.
-- Both show advisory `headlessStatus.finalizationMode: codex`. Status: passed once.
-- Global `DJINN_UA_SEMANTIC_GRAPH_COMMAND` remains unset. Status: pending repeated final check.
+- Fresh tiny and small multi-file targets both pass through Djinn `verify:graph-semantic-command`. Status: passed and repeated.
+- Both show `provenanceSource: understand-anything-semantic`. Status: passed and repeated.
+- Both show advisory `headlessStatus.finalizationMode: codex`. Status: passed and repeated.
+- Global `DJINN_UA_SEMANTIC_GRAPH_COMMAND` remains unset. Status: passed.
 
 ## Last-Mile Boundary
 
@@ -305,4 +304,4 @@ Stop in front of the final quality pass when:
 - local UA tests/build pass. Status: reached once.
 - direct fresh UA proof passes at least once. Status: reached.
 - Djinn verifier proofs for tiny and small targets pass once. Status: reached.
-- final repeated quality pass remains. Status: pending.
+- final repeated quality pass remains. Status: complete.
