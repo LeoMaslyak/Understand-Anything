@@ -6,7 +6,9 @@ import {
   buildCodexArgs,
   buildHeadlessPrompt,
   finalizeSemanticGraphFromIntermediates,
+  headlessStatusPath,
   parseHeadlessArgs,
+  runHeadless,
   validateSemanticGraph,
 } from "../headless-understand.js";
 
@@ -206,6 +208,92 @@ describe("headless understand CLI", () => {
       expect(() => finalizeSemanticGraphFromIntermediates(repo)).toThrow(
         /workflow evidence/,
       );
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("writes a machine-readable status artifact for dry runs", () => {
+    const repo = join(tmpdir(), `ua-headless-status-dry-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    try {
+      mkdirSync(repo, { recursive: true });
+      runHeadless(parseHeadlessArgs([
+        "semantic-graph",
+        repo,
+        "--dry-run",
+        "--timeout-ms",
+        "12345",
+        "--model",
+        "gpt-test",
+      ]));
+
+      const status = JSON.parse(readFileSync(headlessStatusPath(repo), "utf8")) as {
+        schemaVersion?: number;
+        status?: string;
+        stage?: string;
+        repoAbsPath?: string;
+        timeoutMs?: number;
+        model?: string;
+      };
+      expect(status.schemaVersion).toBe(1);
+      expect(status.status).toBe("dry-run");
+      expect(status.stage).toBe("prepared");
+      expect(status.repoAbsPath).toBe(repo);
+      expect(status.timeoutMs).toBe(12345);
+      expect(status.model).toBe("gpt-test");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("writes semantic-ready status when finalizing retained understand intermediates", () => {
+    const repo = join(tmpdir(), `ua-headless-status-finalize-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    try {
+      const intermediate = join(repo, ".understand-anything", "intermediate");
+      mkdirSync(intermediate, { recursive: true });
+      writeFileSync(join(intermediate, "assembled-graph.json"), `${JSON.stringify({
+        nodes: [
+          {
+            id: "file:src/index.ts",
+            type: "file",
+            name: "index.ts",
+            filePath: "src/index.ts",
+            summary: "Semantic analysis identified the application entry point.",
+            tags: ["entry-point"],
+            complexity: "simple",
+          },
+        ],
+        edges: [],
+      }, null, 2)}\n`);
+      writeFileSync(join(intermediate, "layers.json"), "[]\n");
+      writeFileSync(join(intermediate, "tour.json"), "[]\n");
+      writeFileSync(join(intermediate, "scan-result.json"), `${JSON.stringify({
+        name: "fixture",
+        description: "Fixture project.",
+        languages: ["typescript"],
+        frameworks: [],
+        files: [{ path: "src/index.ts" }],
+      }, null, 2)}\n`);
+      writeFileSync(join(intermediate, "assemble-review.json"), `${JSON.stringify({
+        fixedSectionOk: true,
+      }, null, 2)}\n`);
+
+      runHeadless(parseHeadlessArgs(["semantic-graph", repo, "--full"]));
+
+      const status = JSON.parse(readFileSync(headlessStatusPath(repo), "utf8")) as {
+        status?: string;
+        stage?: string;
+        finalizationMode?: string;
+        nodes?: number;
+        edges?: number;
+        provenance?: string;
+      };
+      expect(status.status).toBe("semantic-ready");
+      expect(status.stage).toBe("complete");
+      expect(status.finalizationMode).toBe("intermediates");
+      expect(status.nodes).toBe(1);
+      expect(status.edges).toBe(0);
+      expect(status.provenance).toBe("understand-anything-semantic");
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }

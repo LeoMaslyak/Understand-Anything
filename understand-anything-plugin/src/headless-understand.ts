@@ -16,6 +16,23 @@ export interface HeadlessOptions {
   outputLastMessage: string | null;
 }
 
+export interface HeadlessStatus {
+  schemaVersion: 1;
+  generatedAt: string;
+  repoAbsPath: string;
+  full: boolean;
+  timeoutMs: number;
+  model: string | null;
+  outputLastMessage: string;
+  status: "dry-run" | "running" | "semantic-ready" | "failed";
+  stage: "prepared" | "finalizing-intermediates" | "running-codex" | "complete" | "failed";
+  finalizationMode: "dry-run" | "intermediates" | "codex";
+  nodes?: number;
+  edges?: number;
+  provenance?: string;
+  error?: string;
+}
+
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
 
 export function parseHeadlessArgs(argv: string[]): HeadlessOptions {
@@ -115,6 +132,10 @@ export function buildCodexArgs(options: HeadlessOptions, outputLastMessage: stri
   return args;
 }
 
+export function headlessStatusPath(repoAbsPath: string): string {
+  return join(repoAbsPath, ".understand-anything", "headless-status.json");
+}
+
 export function validateSemanticGraph(repoAbsPath: string): { nodes: number; edges: number; provenance: string } {
   const graphPath = join(repoAbsPath, ".understand-anything", "knowledge-graph.json");
   const rawGraph = JSON.parse(readFileSync(graphPath, "utf8")) as Record<string, unknown>;
@@ -190,7 +211,7 @@ function semanticProvenance(graph: Record<string, unknown>): string {
   return "";
 }
 
-function run(options: HeadlessOptions): void {
+export function runHeadless(options: HeadlessOptions): void {
   if (!existsSync(options.repoAbsPath)) {
     throw new Error(`Repository path does not exist: ${options.repoAbsPath}`);
   }
@@ -202,6 +223,11 @@ function run(options: HeadlessOptions): void {
   const codexArgs = buildCodexArgs(options, outputLastMessage);
 
   if (options.dryRun) {
+    writeHeadlessStatus(options, outputLastMessage, {
+      status: "dry-run",
+      stage: "prepared",
+      finalizationMode: "dry-run",
+    });
     console.log(JSON.stringify({
       repoAbsPath: options.repoAbsPath,
       full: options.full,
@@ -214,25 +240,81 @@ function run(options: HeadlessOptions): void {
     return;
   }
 
-  if (hasFinalizableIntermediates(options.repoAbsPath)) {
-    const result = finalizeSemanticGraphFromIntermediates(options.repoAbsPath);
-    console.log(`[understand-anything] semantic graph finalized from intermediates (${result.nodes} nodes, ${result.edges} edges, provenance ${result.provenance})`);
-    return;
+  try {
+    if (hasFinalizableIntermediates(options.repoAbsPath)) {
+      writeHeadlessStatus(options, outputLastMessage, {
+        status: "running",
+        stage: "finalizing-intermediates",
+        finalizationMode: "intermediates",
+      });
+      const result = finalizeSemanticGraphFromIntermediates(options.repoAbsPath);
+      writeHeadlessStatus(options, outputLastMessage, {
+        status: "semantic-ready",
+        stage: "complete",
+        finalizationMode: "intermediates",
+        nodes: result.nodes,
+        edges: result.edges,
+        provenance: result.provenance,
+      });
+      console.log(`[understand-anything] semantic graph finalized from intermediates (${result.nodes} nodes, ${result.edges} edges, provenance ${result.provenance})`);
+      return;
+    }
+
+    writeHeadlessStatus(options, outputLastMessage, {
+      status: "running",
+      stage: "running-codex",
+      finalizationMode: "codex",
+    });
+    execFileSync("codex", codexArgs, {
+      cwd: options.repoAbsPath,
+      encoding: "utf8",
+      stdio: ["ignore", "inherit", "inherit"],
+      timeout: options.timeoutMs,
+      env: {
+        ...process.env,
+        UNDERSTAND_NO_WORKTREE_REDIRECT: process.env.UNDERSTAND_NO_WORKTREE_REDIRECT ?? "1",
+      },
+    });
+
+    const result = validateSemanticGraph(options.repoAbsPath);
+    writeHeadlessStatus(options, outputLastMessage, {
+      status: "semantic-ready",
+      stage: "complete",
+      finalizationMode: "codex",
+      nodes: result.nodes,
+      edges: result.edges,
+      provenance: result.provenance,
+    });
+    console.log(`[understand-anything] semantic graph ready (${result.nodes} nodes, ${result.edges} edges, provenance ${result.provenance})`);
+  } catch (error) {
+    writeHeadlessStatus(options, outputLastMessage, {
+      status: "failed",
+      stage: "failed",
+      finalizationMode: hasFinalizableIntermediates(options.repoAbsPath) ? "intermediates" : "codex",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
+}
 
-  execFileSync("codex", codexArgs, {
-    cwd: options.repoAbsPath,
-    encoding: "utf8",
-    stdio: ["ignore", "inherit", "inherit"],
-    timeout: options.timeoutMs,
-    env: {
-      ...process.env,
-      UNDERSTAND_NO_WORKTREE_REDIRECT: process.env.UNDERSTAND_NO_WORKTREE_REDIRECT ?? "1",
-    },
-  });
-
-  const result = validateSemanticGraph(options.repoAbsPath);
-  console.log(`[understand-anything] semantic graph ready (${result.nodes} nodes, ${result.edges} edges, provenance ${result.provenance})`);
+function writeHeadlessStatus(
+  options: HeadlessOptions,
+  outputLastMessage: string,
+  status: Pick<HeadlessStatus, "status" | "stage" | "finalizationMode"> & Partial<Pick<HeadlessStatus, "nodes" | "edges" | "provenance" | "error">>,
+): void {
+  const uaDir = join(options.repoAbsPath, ".understand-anything");
+  mkdirSync(uaDir, { recursive: true });
+  const artifact: HeadlessStatus = {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    repoAbsPath: options.repoAbsPath,
+    full: options.full,
+    timeoutMs: options.timeoutMs,
+    model: options.model,
+    outputLastMessage,
+    ...status,
+  };
+  writeFileSync(headlessStatusPath(options.repoAbsPath), `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
 }
 
 function hasFinalizableIntermediates(repoAbsPath: string): boolean {
@@ -383,7 +465,7 @@ semantic provenance. This command does not hand-write or relabel graph output.`)
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    run(parseHeadlessArgs(process.argv.slice(2)));
+    runHeadless(parseHeadlessArgs(process.argv.slice(2)));
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
