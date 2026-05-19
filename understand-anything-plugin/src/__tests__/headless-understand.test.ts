@@ -32,7 +32,7 @@ describe("headless understand CLI", () => {
     expect(options.dryRun).toBe(true);
   });
 
-  it("builds a Codex invocation that runs the real understand workflow headlessly", () => {
+  it("builds a Codex invocation that runs the semantic workflow headlessly", () => {
     const options = parseHeadlessArgs([
       "semantic-graph",
       "/repo",
@@ -49,7 +49,7 @@ describe("headless understand CLI", () => {
     expect(args).toContain("/tmp/last-message.txt");
     expect(args).toContain("--model");
     expect(args).toContain("gpt-test");
-    expect(args.at(-1)).toContain("Run the real Understand-Anything /understand workflow end-to-end");
+    expect(args.at(-1)).toContain("Run the Understand-Anything semantic graph workflow headlessly");
     expect(args.at(-1)).toContain("Do not hand-write or manually assemble");
     expect(args.at(-1)).toContain("reuse valid intermediate artifacts");
     expect(args.at(-1)).toContain("understand-anything-semantic");
@@ -63,14 +63,28 @@ describe("headless understand CLI", () => {
     expect(pkg.bin?.["understand-anything"]).toBe("dist/headless-understand.js");
   });
 
-  it("names the upstream skill path in the generated prompt", () => {
+  it("names the requested headless semantic command in the generated prompt", () => {
     const prompt = buildHeadlessPrompt({
       repoAbsPath: "/repo",
       full: true,
     });
 
-    expect(prompt).toContain("understand-anything-plugin/skills/understand/SKILL.md");
-    expect(prompt).toContain("/understand /repo --full");
+    expect(prompt).toContain("understand-anything semantic-graph /repo --full");
+    expect(prompt).toContain("Required output files:");
+  });
+
+  it("uses a concise noninteractive fresh-run contract instead of the full interactive skill", () => {
+    const prompt = buildHeadlessPrompt({
+      repoAbsPath: "/repo",
+      full: true,
+    });
+
+    expect(prompt).toContain("Headless execution contract");
+    expect(prompt).toContain("Do not dispatch subagents");
+    expect(prompt).toContain("Do not wait for user confirmation");
+    expect(prompt).toContain("Write .understand-anything/knowledge-graph.json");
+    expect(prompt).not.toContain("Use the installed skill instructions at:");
+    expect(prompt).not.toContain("Run the real Understand-Anything /understand workflow end-to-end");
   });
 
   it("validates top-level semantic provenance from the raw graph artifact", () => {
@@ -109,6 +123,98 @@ describe("headless understand CLI", () => {
         edges: 0,
         provenance: "understand-anything-semantic",
       });
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("normalizes common headless LLM graph schema drift before validation", () => {
+    const repo = join(tmpdir(), `ua-headless-normalize-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    try {
+      mkdirSync(join(repo, ".understand-anything"), { recursive: true });
+      writeFileSync(join(repo, ".understand-anything", "knowledge-graph.json"), `${JSON.stringify({
+        provenance: "understand-anything-semantic",
+        version: 1,
+        kind: "knowledge-graph",
+        project: {
+          name: "fixture",
+          rootPath: repo,
+          description: "Fixture project.",
+          languages: ["TypeScript"],
+          frameworks: [],
+        },
+        nodes: [
+          {
+            id: "project-root",
+            type: "project",
+            name: "fixture",
+            summary: "Fixture project root.",
+            tags: ["overview"],
+            complexity: 1,
+          },
+          {
+            id: "file:src/index.ts",
+            type: "file",
+            name: "index.ts",
+            filePath: "src/index.ts",
+            summary: "Entry point.",
+            tags: ["entry"],
+            complexity: 1,
+          },
+        ],
+        edges: [
+          {
+            source: "project-root",
+            target: "file:src/index.ts",
+            type: "defines",
+            direction: "outbound",
+            weight: 2,
+          },
+        ],
+        layers: [
+          {
+            id: "layer:overview",
+            name: "Overview",
+            summary: "Project overview.",
+            nodeIds: ["project-root", "file:src/index.ts"],
+          },
+        ],
+        tour: [
+          {
+            step: 1,
+            title: "Entry Point",
+            summary: "Start at the entry point.",
+            nodeId: "file:src/index.ts",
+          },
+        ],
+      }, null, 2)}\n`);
+
+      expect(validateSemanticGraph(repo)).toEqual({
+        nodes: 2,
+        edges: 1,
+        provenance: "understand-anything-semantic",
+      });
+
+      const graph = JSON.parse(readFileSync(join(repo, ".understand-anything", "knowledge-graph.json"), "utf8")) as {
+        kind?: string;
+        project?: { analyzedAt?: string; gitCommitHash?: string };
+        nodes?: Array<{ type?: string; complexity?: string }>;
+        edges?: Array<{ type?: string; direction?: string; weight?: number }>;
+        layers?: Array<{ description?: string }>;
+        tour?: Array<{ order?: number; description?: string; nodeIds?: string[] }>;
+      };
+      expect(graph.kind).toBe("codebase");
+      expect(graph.project?.analyzedAt).toBeTruthy();
+      expect(graph.project?.gitCommitHash).toBeTruthy();
+      expect(graph.nodes?.[0]?.type).toBe("concept");
+      expect(graph.nodes?.[0]?.complexity).toBe("simple");
+      expect(graph.edges?.[0]?.type).toBe("contains");
+      expect(graph.edges?.[0]?.direction).toBe("forward");
+      expect(graph.edges?.[0]?.weight).toBe(1);
+      expect(graph.layers?.[0]?.description).toBe("Project overview.");
+      expect(graph.tour?.[0]?.order).toBe(1);
+      expect(graph.tour?.[0]?.description).toBe("Start at the entry point.");
+      expect(graph.tour?.[0]?.nodeIds).toEqual(["file:src/index.ts"]);
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
