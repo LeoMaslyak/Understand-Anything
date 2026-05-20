@@ -310,11 +310,12 @@ Stop in front of the final quality pass when:
 
 Current state:
 - Branch `ua-headless-semantic-command` is the owned Djinn dependency branch.
-- Latest pushed commit: `3d21427 docs: record final headless semantic gates`.
-- Latest local handoff commit: `e4737bf docs: add UA dependency handoff state`.
+- Minimum pushed evidence commit: `3d21427 docs: record final headless semantic gates`.
+- Minimum handoff contract commit: `e4737bf docs: add UA dependency handoff state`.
 - Runtime hardening commit: `bf661c3 fix: harden headless semantic fresh runs`.
-- Branch was pushed to the owned fork remote `fork` (`https://github.com/LeoMaslyak/Understand-Anything.git`).
+- Branch was pushed to the owned fork remote `fork` (`https://github.com/LeoMaslyak/Understand-Anything.git`) through the dependency-contract docs update.
 - No upstream PR was created to `Lum1104/Understand-Anything`.
+- Djinn handoff publication PR #34 is open in the private Zealous repo: `https://github.com/LeoMaslyak/zealous/pull/34`.
 
 Djinn dependency publication decision:
 - Use a documented local clone contract for now.
