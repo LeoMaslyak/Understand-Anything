@@ -305,3 +305,29 @@ Stop in front of the final quality pass when:
 - direct fresh UA proof passes at least once. Status: reached.
 - Djinn verifier proofs for tiny and small targets pass once. Status: reached.
 - final repeated quality pass remains. Status: complete.
+
+## 2026-05-20 Handoff
+
+Current state:
+- Branch `ua-headless-semantic-command` is the owned Djinn dependency branch.
+- Latest commit: `3d21427 docs: record final headless semantic gates`.
+- Runtime hardening commit: `bf661c3 fix: harden headless semantic fresh runs`.
+- Branch was pushed to the owned fork remote `fork` (`https://github.com/LeoMaslyak/Understand-Anything.git`).
+- No upstream PR was created to `Lum1104/Understand-Anything`.
+
+Completed:
+- Fresh headless semantic runs use the compact noninteractive prompt.
+- Retained-intermediate finalization remains unchanged.
+- Common post-semantic schema drift is normalized only after the graph already declares `provenance: "understand-anything-semantic"`.
+- Focused test/build and Djinn verifier gates passed and were recorded in Djinn PR #32.
+
+Remaining:
+- Decide how Djinn should consume this owned branch reproducibly: pinned fork commit, packaged artifact, submodule, or documented local clone contract.
+- Current Djinn local install check passed from `/Users/leozealous/zealous/.worktrees/djinn-ua-handoff-20260520/apps/djinn` with `DJINN_UA_CLONE_ROOT=/Users/leozealous/.understand-anything/repo bun run verify:graph-ua-local-install`; result included `readyForFullSemanticCommand: true` and `headless-semantic-entrypoint: ok=true`.
+- If a larger target becomes required, run it as a bounded proof with an explicit inline semantic command and enough timeout budget; do not attempt whole-monorepo generation as a default gate.
+
+Guardrails:
+- Do not create upstream PRs to `Lum1104/Understand-Anything` unless the operator explicitly changes policy.
+- Do not use `.understand-anything/headless-status.json` as semantic acceptance evidence.
+- Do not synthesize or stamp semantic provenance onto deterministic/helper output.
+- Keep `DJINN_UA_SEMANTIC_GRAPH_COMMAND` globally unset; configure it inline only for bounded proof commands.
