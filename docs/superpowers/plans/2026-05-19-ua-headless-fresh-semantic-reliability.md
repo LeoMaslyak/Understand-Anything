@@ -310,10 +310,19 @@ Stop in front of the final quality pass when:
 
 Current state:
 - Branch `ua-headless-semantic-command` is the owned Djinn dependency branch.
-- Latest commit: `3d21427 docs: record final headless semantic gates`.
+- Latest pushed commit: `3d21427 docs: record final headless semantic gates`.
+- Latest local handoff commit: `e4737bf docs: add UA dependency handoff state`.
 - Runtime hardening commit: `bf661c3 fix: harden headless semantic fresh runs`.
 - Branch was pushed to the owned fork remote `fork` (`https://github.com/LeoMaslyak/Understand-Anything.git`).
 - No upstream PR was created to `Lum1104/Understand-Anything`.
+
+Djinn dependency publication decision:
+- Use a documented local clone contract for now.
+- Djinn operators should clone `https://github.com/LeoMaslyak/Understand-Anything.git`, check out branch `ua-headless-semantic-command`, and use commit `e4737bf` or later when following the full handoff contract.
+- The minimum runtime floor remains `bf661c3` only when paired with the dependency/handoff docs from `3d21427`; otherwise prefer the latest handoff commit.
+- Consumers should point Djinn at the clone with `DJINN_UA_CLONE_ROOT=/path/to/Understand-Anything` for `verify:graph-ua-local-install` and use inline `DJINN_UA_SEMANTIC_GRAPH_COMMAND=...` only for bounded semantic proofs.
+- Do not make this a submodule, vendored artifact, package dependency, or upstream PR until the operator explicitly chooses that distribution path.
+- Visibility check on 2026-05-20: the Djinn repo `LeoMaslyak/zealous` reports private visibility, while the owned UA fork `LeoMaslyak/Understand-Anything` reports public visibility. Keep this fork limited to dependency code/docs and do not commit private Djinn target artifacts here.
 
 Completed:
 - Fresh headless semantic runs use the compact noninteractive prompt.
@@ -322,8 +331,8 @@ Completed:
 - Focused test/build and Djinn verifier gates passed and were recorded in Djinn PR #32.
 
 Remaining:
-- Decide how Djinn should consume this owned branch reproducibly: pinned fork commit, packaged artifact, submodule, or documented local clone contract.
-- Current Djinn local install check passed from `/Users/leozealous/zealous/.worktrees/djinn-ua-handoff-20260520/apps/djinn` with `DJINN_UA_CLONE_ROOT=/Users/leozealous/.understand-anything/repo bun run verify:graph-ua-local-install`; result included `readyForFullSemanticCommand: true` and `headless-semantic-entrypoint: ok=true`.
+- Re-run Djinn local clone verification after any dependency-doc edits or UA runtime changes.
+- Current Djinn local install recheck passed from `/Users/leozealous/zealous/.worktrees/djinn-ua-handoff-20260520/apps/djinn` with `DJINN_UA_CLONE_ROOT=/Users/leozealous/.understand-anything/repo bun run verify:graph-ua-local-install`; result included `readyForFullSemanticCommand: true` and `headless-semantic-entrypoint: ok=true`, with only the advisory symlink-helper warning.
 - If a larger target becomes required, run it as a bounded proof with an explicit inline semantic command and enough timeout budget; do not attempt whole-monorepo generation as a default gate.
 
 Guardrails:
